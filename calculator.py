@@ -1,6 +1,6 @@
 # Author: Greg Champagne
 # Program: Pokemon Best Defense Type Calculator
-# Version 11-16-22 - v0.2
+# Version 11-16-22 - v0.3
 
 """
 HOW DO I WANT THE MATH TO WORK
@@ -16,6 +16,27 @@ HOW DO I WANT THE MATH TO WORK
     E: Exponential growth in point addition for every additional immunity
 """
 
+type_dict = dict({
+    "Normal": 0,
+    "Fire": 1,
+    "Water": 2,
+    "Grass": 3,
+    "Electric": 4,
+    "Ice": 5,
+    "Fighting": 6,
+    "Poison": 7,
+    "Ground": 8,
+    "Flying": 9,
+    "Psychic": 10,
+    "Bug": 11,
+    "Rock": 12,
+    "Ghost": 13,
+    "Dragon": 14,
+    "Dark": 15,
+    "Steel": 16,
+    "Fairy": 17
+})
+
 
 def main():
     base_types = create_base_types()
@@ -28,6 +49,7 @@ def main():
     # grid_view(all_types)
     # overview(all_types)
     raw_differential_view(all_types)
+    team_test(all_types)
 
 
 # Class that handles the data for a specific type or dual type
@@ -43,6 +65,75 @@ class PokeType:
         self.total_resist = 0
         self.differential = 0
         self.score = 0
+
+
+# Class that handles a collection of PokeType's into a combined format
+class Team:
+    def __init__(self):
+        self.names = []  # Name of every type
+        self.weak = [0] * 18  # Amount of each weakness
+        self.resist = [0] * 18  # Amount of each resist
+        self.immune = [0] * 18  # Amount of each immune
+        self.double_weak = [0] * 18  # Amount of each double_weak
+        self.double_resist = [0] * 18  # Amount of each double_resist
+        self.weak_to = []  # The names of what it is weak to
+        self.resistant_to = []  # The names of what it is resistant to
+        self.total_weak = 0  # Total number of weaknesses
+        self.total_resist = 0  # Total number of resistances
+        self.differential = 0  # Total weak - total resist
+        self.coverage = 0  # Number of unique resists
+        self.holes = 0  # Number of unique weaknesses
+        self.score = 0  # Score of the team as determined by one of the score methods
+
+    # Sets / Returns the differential for a team
+    def get_differential(self):
+        self.differential = self.total_resist - self.total_weak
+        return self.differential
+
+    # Adds a PokeType to the team, currently lumps in immune with resistant_to
+    # Uses the type_dict to convert the types into their positions in the type chart
+    def add_to_team(self, the_type):
+        self.names.append(the_type.name)
+        for i in range(0, len(the_type.weak)):
+            self.weak[type_dict.get(the_type.weak[i])] += 1
+            # self.weak_to.append(the_type.weak[i])
+            self.total_weak += 1
+        for i in range(0, len(the_type.resist)):
+            self.resist[type_dict.get(the_type.resist[i])] += 1
+            # self.resistant_to.append(the_type.resist[i])
+            self.total_resist += 1
+        for i in range(0, len(the_type.double_weak)):
+            self.double_weak[type_dict.get(the_type.double_weak[i])] += 1
+            # self.weak_to.append(the_type.double_weak[i])
+            self.total_weak += 1
+        for i in range(0, len(the_type.double_resist)):
+            self.double_resist[type_dict.get(the_type.double_resist[i])] += 1
+            # self.resistant_to.append(the_type.double_resist[i])
+            self.total_resist += 1
+        for i in range(0, len(the_type.immune)):
+            self.immune[type_dict.get(the_type.immune[i])] += 1
+            # self.resistant_to.append(the_type.immune[i])
+            # self.immune_to.append(the_type.immune[i]) - If counting immune separately from resist
+            self.total_resist += 1
+
+
+def team_test(types):
+    new_team = Team()
+    new_team.add_to_team(types[40])
+    new_team.add_to_team(types[10])
+    new_team.add_to_team(types[150])
+    new_team.add_to_team(types[28])
+    new_team.add_to_team(types[44])
+    new_team.add_to_team(types[133])
+    print(new_team.names)
+    print(new_team.weak)
+    print(new_team.resist)
+    print(new_team.immune)
+    print(new_team.double_resist)
+    print(new_team.double_weak)
+    print("Resists: " + str(new_team.total_resist))
+    print("Weak to: " + str(new_team.total_weak))
+    print("Differential: " + str(new_team.get_differential()))
 
 
 # Manually Enters in all of the type data for each type, and returns the array of each base type

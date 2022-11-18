@@ -1,8 +1,9 @@
 # Author: Greg Champagne
 # Program: Pokemon Best Defense Type Calculator
-# Version 11-16-22 - v0.3
+# Version 11-17-22 - v0.5
 
 import random
+import copy
 
 """ THERE ARE 15,849,819,498,240 POSSIBLE TEAMS, WE SHALL FIND THE BEST ONE
 HOW DO I WANT THE MATH TO WORK
@@ -29,9 +30,12 @@ THINGS TO ADD:
 """
 """
 INTERESTING MATH TIDBITS
-There are 15,849,819,498,240 possible teams using any pokemon type
-There are 4,293,656,640,000  possible teams when you remove all types with negative differential
-There are 1,029,485,041,200  possible teams when you remove all types besides 1+ differentials
+There are 179,437,954,953,600 possible teams using any type, counting types with abilities as other types
+There are 47,782,091,911,680  possible teams when you remove all types with negative differential
+There are 13,596,016,674,240  possible teams when you remove all types besides 1+ differentials
+There are 15,849,819,498,240 possible teams using any pokemon type - no abilities
+There are 4,293,656,640,000  possible teams when you remove all types with negative differential - no abilities
+There are 1,029,485,041,200  possible teams when you remove all types besides 1+ differentials - no abilities
 """
 """
 SURPRISING OBSERVATIONS
@@ -66,15 +70,21 @@ def main():
     dual_types = create_dual_types(base_types)
     dual_types = purge_types(dual_types, False, False, False)
     dual_types = correct_dual_types(dual_types)
-    all_types = sort_poke_types(dual_types + base_types)
+    ability_types = add_ability_asterisks(dual_types + base_types)
+    ability_types = correct_dual_types(ability_types)
+    all_types = base_types + dual_types + ability_types
+    all_types = purge_types(all_types, False, False, False)
+    all_types = sort_poke_types(all_types)
     even_plus_types = top_poketype_cutoff(all_types, 130)
     one_plus_types = top_poketype_cutoff(all_types, 103)
-    # count_types(dual_types)
+    custom = custom_team(all_types)
+    empty = Team()
+    # count_types(all_types)
     # grid_view(all_types)
-    # raw_differential_view(best_types)
+    # raw_differential_view(all_types)
     # team_test(all_types)
-    # find_best_random(even_plus_types, 10000, 20)
-    find_random_threshold(even_plus_types, 3100, 3)
+    find_best_random(even_plus_types, 10000, 1, custom)
+    # find_random_threshold(even_plus_types, 2800, 2, custom)
 
 
 # Class that handles the data for a specific type or dual type
@@ -125,6 +135,9 @@ class Team:
         - IMPORTANT SCORING DATA:
             - AvgD - 1.74 AvgW - 3.78 AvgR - 4.69 AvgI - 0.83 (STAT AVERAGES)
             - TAD - 10.44 TAW - 22.68 TAR - 28.14 TAI - 4.98  (STAT AVERAGES * 6)
+        - NEW SCORING DATA AFTER TYPING ABILITIES CAME INTO PLAY
+            - AvgD - 1.89 AvgW - 3.67 AvgR - 4.53 AvgI - 1.03 (STAT AVERAGES)
+            - TAD - 11.34 TAW - 22.02 TAR - 27.18 TAI - 6.18  (STAT AVERAGES * 6)
     """
 
     # Attempt one at a scoring algorithm, with set weights, and linear score changes
@@ -133,7 +146,7 @@ class Team:
         # Sets score at 1500, the base for most ELO systems
         self.score = 1500
         # Adds a 15 score increase for every resist the team has more than average expected (~28)
-        if self.total_resist >= 28:
+        if self.total_resist >= 27:
             self.score += (15 * (self.total_resist - 28))
         # Adds 5 points for every double resist for those being slightly better than normal resists
         self.score += (5 * self.total_dr)
@@ -269,46 +282,57 @@ GENERAL METHODS
 """
 
 
-# Sort all of the pokemon types by "best" to "worst"
-def sort_poke_types(types):
-    # Sort the list by differential, then weaks, then resists, then immunities
-    for i in range(0, len(types)):
-        types[i].total_resist = len(types[i].resist) + len(types[i].double_resist)
-        types[i].total_weak = len(types[i].weak) + len(types[i].double_weak)
-        types[i].differential = types[i].total_resist + len(types[i].immune) - types[i].total_weak
-    types.sort(key=lambda x: (-x.differential, x.total_weak, -x.total_resist, -len(x.immune)))
-    return types
+# Enter in 1-6 members of a team to see how it fairs
+def custom_team(types):
+    # Call RDV for display purposes
+    raw_differential_view(types)
+    # Allow the user to continue entering in pokemon until done
+    done = False
+    print("Welcome to the team creator! Add 6 pokemon to your team or enter -1 to close out early!")
+    new_team = Team()
+    while not done:
+        if len(new_team.names) > 0:
+            print("Current Team: " + str(new_team.names))
+        choice = int(input("Please enter in the poketype number you'd like to add: "))
+        if choice == -1:
+            done = True
+        elif len(types) > choice > -1:
+            new_team.add_to_team(types[choice])
+        else:
+            print("That is out of bounds or not an int, please try again!")
+
+    return new_team
 
 
 # Simply randomly picks 6 possible pokemon and creates a team of them
-def create_random_team(types):
-    temp_team = Team()
-    for i in range(0, 6):
+def create_random_team(types, custom):
+    temp_team = copy.deepcopy(custom)
+    for i in range(0, 6 - len(custom.names)):
         temp_team.add_to_team(types[random.randint(0, len(types) - 1)])
 
     return temp_team
 
 
-# Creates x random teams, and sorts them based on elo score. Presents the top y
-def find_best_random(types, x, y):
+# Creates x random teams, and sorts them based on elo score. Presents the top y. Using a custom team to start if there
+def find_best_random(types, x, y, team):
     teams = []
     for i in range(0, x):
-        teams.append(create_random_team(types))
+        teams.append(create_random_team(types, team))
 
     teams.sort(key=lambda z: -z.score)
     for i in range(0, y):
         teams[i].print_team(i + 1)
 
 
-# Loops until it finds a team with a score of or above x, y number of times
-def find_random_threshold(types, x, y):
+# Loops until it finds a team with a score of or above x, y number of times. Using a custom team to start if there
+def find_random_threshold(types, x, y, team):
     found = False
     teams = []
     counter = 0
     attempts = 0
     while not found:
         attempts += 1
-        temp_team = create_random_team(types)
+        temp_team = create_random_team(types, team)
         if temp_team.score >= x:
             counter += 1
             teams.append(temp_team)
@@ -340,6 +364,21 @@ def team_test(types):
     print(new_team.double_weak)
     """
 
+"""
+CREATION / EDITING / FIXING / SORTING OF POKEMON TYPES
+"""
+
+
+# Sort all of the pokemon types by "best" to "worst"
+def sort_poke_types(types):
+    # Sort the list by differential, then weaks, then resists, then immunities
+    for i in range(0, len(types)):
+        types[i].total_resist = len(types[i].resist) + len(types[i].double_resist)
+        types[i].total_weak = len(types[i].weak) + len(types[i].double_weak)
+        types[i].differential = types[i].total_resist + len(types[i].immune) - types[i].total_weak
+    types.sort(key=lambda x: (-x.differential, x.total_weak, -x.total_resist, -len(x.immune)))
+    return types
+
 
 # Manually Enters in all of the type data for each type, and returns the array of each base type
 def create_base_types():
@@ -353,7 +392,7 @@ def create_base_types():
              PokeType("Fighting", ["Flying", "Psychic", "Fairy"], ["Bug", "Rock", "Dark"], []),
              PokeType("Poison", ["Ground", "Psychic"], ["Grass", "Fighting", "Poison", "Bug", "Fairy"], []),
              PokeType("Ground", ["Water", "Grass", "Ice"], ["Poison", "Rock"], ["Electric"]),
-             PokeType("Flying", ["Electric", "Ice", "Rock"], ["Grass", "Fighting", "Ground", "Bug"], ["Ground"]),
+             PokeType("Flying", ["Electric", "Ice", "Rock"], ["Grass", "Fighting", "Bug"], ["Ground"]),
              PokeType("Psychic", ["Bug", "Ghost", "Dark"], ["Fighting", "Psychic"], []),
              PokeType("Bug", ["Fire", "Flying", "Rock"], ["Grass", "Fighting", "Ground"], []),
              PokeType("Rock", ["Water", "Grass", "Fighting", "Ground", "Steel"],
@@ -383,11 +422,128 @@ def create_dual_types(types):
     return dual_types
 
 
+# Create Special types, pokemon that have abilities / other factors about them that change their weak/resist/immune
+def add_ability_asterisks(types):
+    # DON'T ADD ANY TYPES THAT ALREADY HAVE THAT IMMUNE, BREAKS CODE AND REDUNDANT
+    ability_types = []
+    # Types with Thick fat have a resist to fire / ice
+    thick_fat = ["Normal", "Ice", "Fighting", "Normal/Fairy", "Water/Fairy", "Water", "Water/Ice", "Ice/Ground",
+                 "Fire", "Fire/Fighting", "Grass/Dragon"]
+    for i in types:
+        for ii in thick_fat:
+            if i.name == ii:
+                new_type = copy.deepcopy(i)
+                new_type.name += "*TF"
+                new_type.resist.append("Ice")
+                new_type.resist.append("Fire")
+                ability_types.append(new_type)
+                thick_fat.remove(ii)
+    # Types with Levitate gain immunity to ground
+    levitate = ["Poison/Ghost", "Poison", "Poison/Fairy", "Ghost", "Psychic", "Ground/Dragon", "Psychic/Rock",
+                "Ground/Psychic", "Psychic/Dragon", "Psychic/Steel", "Grass", "Electric", "Electric/Ghost",
+                "Fire/Electric", "Water/Electric", "Grass/Electric", "Electric/Ice", "Ice", "Dragon/Dark",
+                "Electric/Bug"]
+    for i in types:
+        for ii in levitate:
+            if i.name == ii:
+                new_type = copy.deepcopy(i)
+                new_type.name += "*Lev"
+                new_type.immune.append("Ground")
+                ability_types.append(new_type)
+                levitate.remove(ii)
+    # Types with Water Bubble and Heatproof have a resist to fire
+    fire_resist = ["Water/Bug", "Psychic/Steel", "Rock"]
+    for i in types:
+        for ii in fire_resist:
+            if i.name == ii:
+                new_type = copy.deepcopy(i)
+                new_type.name += "*FR"
+                new_type.resist.append("Fire")
+                ability_types.append(new_type)
+    # Types with Water Absorb / Storm Drain are immune to water
+    wa_sd = ["Water/Ground", "Water", "Grass/Rock", "Grass", "Water/Dragon", "Water/Fighting", "Water/Ice",
+             "Poison/Ground", "Water/Flying", "Fire/Water", "Water/Ghost", "Water/Electric", "Grass/Dark",
+             "Water/Bug", "Grass/Dark"]
+    for i in types:
+        for ii in wa_sd:
+            if i.name == ii:
+                new_type = copy.deepcopy(i)
+                new_type.name += "*WR"
+                new_type.immune.append("Water")
+                ability_types.append(new_type)
+                wa_sd.remove(ii)
+    # Types with wonder guard are immune to everything that they are not weak to, which is just shedinja,
+    # So I'm not going to rewrite correct_dual_types, and will instead just hard code what it's not weak to
+    wonder = ["Bug/Ghost"]
+    for i in types:
+        for ii in wonder:
+            if i.name == ii:
+                new_type = copy.deepcopy(i)
+                new_type.name += "*WG"
+                new_type.immune.append("Water")
+                new_type.immune.append("Electric")
+                new_type.immune.append("Grass")
+                new_type.immune.append("Ice")
+                new_type.immune.append("Poison")
+                new_type.immune.append("Ground")
+                new_type.immune.append("Psychic")
+                new_type.immune.append("Bug")
+                new_type.immune.append("Dragon")
+                new_type.immune.append("Steel")
+                new_type.immune.append("Fairy")
+                ability_types.append(new_type)
+    # Types with flash fire are immune to fire
+    flash_fire = ["Fire", "Fire/Rock", "Fire/Ghost", "Fire/Bug", "Fire/Steel", "Fire/Psychic", "Fire/Dark"]
+    for i in types:
+        for ii in flash_fire:
+            if i.name == ii:
+                new_type = copy.deepcopy(i)
+                new_type.name += "*FF"
+                new_type.immune.append("Fire")
+                ability_types.append(new_type)
+                flash_fire.remove(ii)
+    # Types with Lightning Rod or Volt Absorb are immune to electric (Fire/Ghost Alolan marowak can, uncounted)
+    light_resist = ["Ground", "Electric", "Electric/Steel", "Ground/Rock", "Water",
+                    "Water/Electric", "Electric/Flying", "Electric/Dragon", "Electric/Ice", "Electric/Fighting"]
+    for i in types:
+        for ii in light_resist:
+            if i.name == ii:
+                new_type = copy.deepcopy(i)
+                new_type.name += "*ER"
+                new_type.immune.append("Electric")
+                ability_types.append(new_type)
+                light_resist.remove(ii)
+    # Types with dry skin are immune to water but weak to fire
+    dry_skin = ["Ice/Psychic", "Normal/Electric", "Fighting/Poison", "Grass/Bug"]
+    for i in types:
+        for ii in dry_skin:
+            if i.name == ii:
+                new_type = copy.deepcopy(i)
+                new_type.name += "*DS"
+                new_type.immune.append("Water")
+                new_type.weak.append("Fire")
+                ability_types.append(new_type)
+                dry_skin.remove(ii)
+    # Types with Fluffy are weak to fire
+    fluffy = ["Normal", "Normal/Fighting", "Ghost"]
+    for i in types:
+        for ii in fluffy:
+            if i.name == ii:
+                new_type = copy.deepcopy(i)
+                new_type.name += "*F"
+                new_type.weak.append("Fire")
+                ability_types.append(new_type)
+                fluffy.remove(ii)
+    return ability_types
+
+
 # Removes repeats and tabulates 4x, 1/4, and replaces resists with immunity
 def correct_dual_types(dual):
     corrected = []
     # For every dual type
     for i in range(0, len(dual)):
+        resist_repeat = []
+        weak_repeat = []
         # For each element in immune remove repeats
         for ii in range(0, len(dual[i].immune) - 1):
             for iii in range(ii + 1, len(dual[i].immune)):
@@ -401,45 +557,145 @@ def correct_dual_types(dual):
                     dual[i].double_weak.append(dual[i].weak[ii])
                     dual[i].weak[ii] = "Null"
                     dual[i].weak[iii] = "Null"
-        # For each resist, do the same as the weak for loop
-        for ii in range(0, len(dual[i].resist) - 1):
-            for iii in range(ii + 1, len(dual[i].resist)):
-                if dual[i].resist[ii] == dual[i].resist[iii] and dual[i].resist[ii] != "Null":
-                    dual[i].double_resist.append(dual[i].resist[ii])
-                    dual[i].resist[ii] = "Null"
-                    dual[i].resist[iii] = "Null"
+        # Double check for repeats thanks to abilities
+        for ii in range(0, len(dual[i].weak)):
+            for iii in range(0, len(weak_repeat)):
+                if dual[i].weak[ii] == weak_repeat[iii]:
+                    dual[i].weak[ii] = "Null"
+            for iii in range(0, len(dual[i].double_weak)):
+                if dual[i].weak[ii] == dual[i].double_weak[iii]:
+                    dual[i].weak[ii] = "Null"
         # Now, for each resist, check it against weak to see if there's any that need to be null as well
         for ii in range(0, len(dual[i].resist)):
             for iii in range(0, len(dual[i].weak)):
                 if dual[i].resist[ii] == dual[i].weak[iii] and dual[i].resist[ii] != "Null":
                     dual[i].resist[ii] = "Null"
                     dual[i].weak[iii] = "Null"
+        # For each resist, do the same as the weak for loop
+        for ii in range(0, len(dual[i].resist) - 1):
+            for iii in range(ii + 1, len(dual[i].resist)):
+                if dual[i].resist[ii] == dual[i].resist[iii] and dual[i].resist[ii] != "Null":
+                    dual[i].double_resist.append(dual[i].resist[ii])
+                    resist_repeat.append(dual[i].resist[ii])
+                    dual[i].resist[ii] = "Null"
+                    dual[i].resist[iii] = "Null"
+        # Double check for repeats thanks to abilities
+        for ii in range(0, len(dual[i].resist)):
+            for iii in range(0, len(resist_repeat)):
+                if dual[i].resist[ii] == resist_repeat[iii]:
+                    dual[i].resist[ii] = "Null"
+            for iii in range(0, len(dual[i].double_resist)):
+                if dual[i].resist[ii] == dual[i].double_resist[iii]:
+                    dual[i].resist[ii] = "Null"
         # For all elements in immune, check against all in resist / weak to convert them to just immune
         for ii in range(0, len(dual[i].immune)):
-            for iii in range(ii, len(dual[i].resist)):
-                if ii < len(dual[i].immune) and iii < len(dual[i].resist):
-                    if dual[i].immune[ii] == dual[i].resist[iii]:
-                        dual[i].resist[iii] = "Null"
-            for iii in range(ii, len(dual[i].weak)):
-                if ii < len(dual[i].immune) and iii < len(dual[i].weak):
-                    if dual[i].immune[ii] == dual[i].weak[iii]:
-                        dual[i].weak[iii] = "Null"
+            for iii in range(0, len(dual[i].resist)):
+                if dual[i].immune[ii] == dual[i].resist[iii] and dual[i].resist[iii] != "Null":
+                    dual[i].resist[iii] = "Null"
+            for iii in range(0, len(dual[i].weak)):
+                if dual[i].immune[ii] == dual[i].weak[iii]:
+                    dual[i].weak[iii] = "Null"
+            # Also remove from double weak and double resist thanks to ability types
+            for iii in range(0, len(dual[i].double_weak)):
+                if dual[i].immune[ii] == dual[i].double_weak[iii]:
+                    dual[i].double_weak[iii] = "Null"
+            for iii in range(0, len(dual[i].double_resist)):
+                if dual[i].immune[ii] == dual[i].double_resist[iii]:
+                    dual[i].double_resist[iii] = "Null"
         # Now that everything is fixed, create new arrays without bringing over the null elements
         resists = []
         weaks = []
+        immunes = []
+        drs = []
+        dws = []
         for ii in dual[i].resist:
             if ii != "Null":
                 resists.append(ii)
         for ii in dual[i].weak:
             if ii != "Null":
                 weaks.append(ii)
+        for ii in dual[i].double_resist:
+            if ii != "Null":
+                drs.append(ii)
+        for ii in dual[i].double_weak:
+            if ii != "Null":
+                dws.append(ii)
+        for ii in dual[i].immune:
+            if ii != "Null":
+                immunes.append(ii)
         dual[i].resist = resists
         dual[i].weak = weaks
+        dual[i].immune = immunes
+        dual[i].double_weak = dws
+        dual[i].double_resist = drs
 
         # Append the fixed dual type to the new array, and return that array when done
         corrected.append(dual[i])
 
     return corrected
+
+
+# Possibly will edit this at some point, but I believe this to be the new correct impossible list given gen 9 pokemon
+# https://bulbapedia.bulbagarden.net/wiki/List_of_type_combinations_by_abundance link to site of info
+def purge_types(types, mega, personal, nine):
+    # Types that don't exist now or in Gen 9 from what I know now
+    impossible = ["Normal/Rock", "Normal/Bug", "Normal/Steel", "Normal/Ice", "Fighting/Fairy",
+                  "Ice/Poison", "Ground/Fairy", "Rock/Ghost", "Bug/Dragon", "Fire/Fairy"]
+
+    # Types that only exist as mega types, which don't exist at in Gen 9
+    # If mega is False, they will not be included
+    mega_types = ["Dragon/Fairy"]
+
+    # Types that I'm now choosing to exclude because not in Gen 9 from my knowledge, and extremely limited if so
+    not_in_gen_nine = ["Normal/Electric", "Water/Steel", "Grass/Steel", "Poison/Fairy", "Ground/Steel",
+                       "Psychic/Dragon", "Fire/Dragon", "Psychic/Dark", "Water/Grass", "Electric/Steel*ER",
+                       "Water*ER", "Grass/Bug*DS", "Water/Ground*WR", "Bug/Ghost*WG", "Water/Electric*ER",
+                       "Poison*Lev", "Water/Bug*FR", "Ice/Psychic*DS", "Normal/Dark", "Ground/Dragon*Lev",
+                       "Water/Flying*WR", "Water/Fighting*WR"]
+
+    # I just personally don't want to include these, change this to true if you want any of these
+    # If personal is false, they will not be included
+    # REASONS FOR EACH: 1 - Dedenne nah 2 - Only through poke home for gen 9
+    #                   3 - Zoruark pokehome only 4 - Azurill TF lmao 5 - pokehome heatran 6 - Calyrex pokehome
+    personally_against = ["Electric/Fairy", "Dragon/Steel", "Normal/Ghost", "Normal/Fairy*TF", "Fire/Steel*FF",
+                          "Ice/Psychic"]
+
+    good_types = []
+    for i in range(0, len(types)):
+        good = True
+        for ii in range(0, len(impossible)):
+            if types[i].name == impossible[ii]:
+                good = False
+        for ii in range(0, len(mega_types)):
+            if types[i].name == mega_types[ii] and not mega:
+                good = False
+                # print("PURGE SUCCESS M")
+        for ii in range(0, len(personally_against)):
+            if types[i].name == personally_against[ii] and not personal:
+                good = False
+                # print("PURGE SUCCESS P")
+        for ii in range(0, len(not_in_gen_nine)):
+            if types[i].name == not_in_gen_nine[ii] and not nine:
+                # print("PURGE SUCCESS N")
+                good = False
+        if good:
+            good_types.append(types[i])
+
+    return good_types
+
+
+# Removes any pokemon past the cutoff number x from the list of pokemon types
+# Is a way to reduce the amount of random guessing the machine will have to do to find good teams
+def top_poketype_cutoff(types, x):
+    best_types = []
+    for i in range(0, x):
+        best_types.append(types[i])
+
+    return best_types
+
+"""
+DISPLAY METHODS
+"""
 
 
 # Returns the list of types, helpful for information checking and making sure things work lol
@@ -488,57 +744,5 @@ def raw_differential_view(types):
           " Avg R: " + str(round(avg_resist, 2)) + " Avg I: " + str(round(avg_imm, 2)))
     # RESULTS FOR GOOD MEASURE: AD - 1.74 AW - 3.78 AR - 4.69 AI - 0.83
 
-
-# Possibly will edit this at some point, but I believe this to be the new correct impossible list given gen 9 pokemon
-# https://bulbapedia.bulbagarden.net/wiki/List_of_type_combinations_by_abundance link to site of info
-def purge_types(types, mega, personal, nine):
-    # Types that don't exist now or in Gen 9 from what I know now
-    impossible = ["Normal/Rock", "Normal/Bug", "Normal/Steel", "Normal/Ice", "Fighting/Fairy",
-                  "Ice/Poison", "Ground/Fairy", "Rock/Ghost", "Bug/Dragon", "Fire/Fairy"]
-
-    # Types that only exist as mega types, which don't exist at in Gen 9
-    # If mega is False, they will not be included
-    mega_types = ["Dragon/Fairy"]
-
-    # Types that I'm now choosing to exclude because not in Gen 9 from my knowledge, and extremely limited if so
-    not_in_gen_nine = ["Normal/Electric", "Water/Steel", "Grass/Steel", "Poison/Fairy", "Ground/Steel",
-                       "Water/Dragon", "Electric/Dragon", "Psychic/Dragon", "Fire/Dragon", "Psychic/Dark",
-                       "Water/Grass"]
-
-    # I just personally don't want to include these, change this to true if you want any of these
-    # If personal is false, they will not be included
-    # REASONS FOR EACH: 1 - Dedenne nah 2 - Only through poke home for gen 9 3 - Only Oricorio / Legendary
-    #                   4 - Zoruark pokehome only 5
-    personally_against = ["Electric/Fairy", "Dragon/Steel", "Electric/Flying", "Normal/Ghost"]
-
-    good_types = []
-    for i in range(0, len(types)):
-        good = True
-        for ii in range(0, len(impossible)):
-            if types[i].name == impossible[ii]:
-                good = False
-            if ii < len(mega_types):
-                if types[i].name == mega_types[ii] and not mega:
-                    good = False
-            if ii < len(personally_against):
-                if types[i].name == personally_against[ii] and not personal:
-                    good = False
-            if ii < len(not_in_gen_nine):
-                if types[i].name == not_in_gen_nine[ii] and not nine:
-                    good = False
-        if good:
-            good_types.append(types[i])
-
-    return good_types
-
-
-# Removes any pokemon past the cutoff number x from the list of pokemon types
-# Is a way to reduce the amount of random guessing the machine will have to do to find good teams
-def top_poketype_cutoff(types, x):
-    best_types = []
-    for i in range(0, x):
-        best_types.append(types[i])
-
-    return best_types
 
 main()
